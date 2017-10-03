@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 
 
-def read_etl_file(f, sample_size, bits_per_pixel, image_shape, unpack_format, charcode_idx, image_idx):
+def read_etl_sample(f, sample_size, bits_per_pixel, image_shape, unpack_format, charcode_idx, image_idx):
     """Reads a sample from an ETL file.
     Args:
         f (file): File iterator.
@@ -57,13 +57,13 @@ def read_etl6_data(basepath):
         with open(path, 'rb') as f:
             for i in range(n_samples):
                 f.seek(i * sample_size)
-                data.append(read_etl_file(f, sample_size, bits_per_pixel,
-                                          image_shape, unpack_format, charcode_idx, image_idx))
+                data.append(read_etl_sample(f, sample_size, bits_per_pixel,
+                                            image_shape, unpack_format, charcode_idx, image_idx))
 
     return data
 
 
-def data2array(data, new_shape=None, norm_factor=255.0, expand_dims=True):
+def data2array(data, new_shape=None, linear_remap=((0, 255), (-1, 1)), expand_dims=True):
     if new_shape is None:
         images = [np.asarray(d[-1]) for d in data]
     else:
@@ -71,8 +71,14 @@ def data2array(data, new_shape=None, norm_factor=255.0, expand_dims=True):
 
     array = np.stack(images, axis=0)
 
-    if norm_factor:
-        array = np.float32(array) / norm_factor
+    if linear_remap:
+
+        (x0, x1), (y0, y1) = linear_remap
+        if x0 == x1 or y0 == y1:
+            raise ValueError('Invalid remap values.')
+
+        m = (y1 - y0) / (x1 - x0)
+        array = m * (np.float32(array) - x0) + y0
 
     if expand_dims:
         array = np.expand_dims(array, axis=3)
