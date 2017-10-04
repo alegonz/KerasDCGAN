@@ -3,7 +3,7 @@ from keras.models import Model
 from keras.layers import Input, Reshape, Flatten
 from keras.layers import Dense, BatchNormalization, Activation, LeakyReLU, Dropout
 from keras.layers import Conv2D, Conv2DTranspose, UpSampling2D
-from keras.optimizers import Adam, SGD
+from keras.optimizers import RMSprop
 
 
 class DCGAN(object):
@@ -23,11 +23,9 @@ class DCGAN(object):
         a_leakyrelu_alpha: Alpha parameter of LeakyReLU activation.
         a_dropout_rate: Dropout rate.
         a_bn_momentum: Batch normalization momentum.
-        a_loss: Loss function.
         a_optimizer: Optimizer.
 
         # Generative Adversarial (stacked) model:
-        ga_loss: Loss function.
         ga_optimizer: Optimizer.
 
     """
@@ -37,8 +35,8 @@ class DCGAN(object):
                  g_dropout_rate=0.4, g_bn_momentum=0.9, g_distribution='gaussian',
                  a_filters=512, a_kernel_size=5, a_leakyrelu_alpha=0.2,
                  a_dropout_rate=0.4, a_bn_momentum=0.9,
-                 a_loss='binary_crossentropy', a_optimizer_lr=1e-5, a_optimizer_momentum=0.9,
-                 ga_loss='binary_crossentropy', ga_optimizer_lr=1e-5):
+                 a_optimizer=RMSprop(lr=0.0002, decay=6e-8),
+                 ga_optimizer=RMSprop(lr=0.0001, decay=3e-8)):
 
         # Generative model parameters
         self.g_input_dim = g_input_dim
@@ -54,12 +52,12 @@ class DCGAN(object):
         self.a_leakyrelu_alpha = a_leakyrelu_alpha
         self.a_dropout_rate = a_dropout_rate
         self.a_bn_momentum = a_bn_momentum
-        self.a_loss = a_loss
-        self.a_optimizer = SGD(lr=a_optimizer_lr, momentum=a_optimizer_momentum)
+        self._a_loss = 'binary_crossentropy'
+        self.a_optimizer = a_optimizer
 
         # Generative Adversarial model (stacked model) parameters
-        self.ga_loss = ga_loss
-        self.ga_optimizer = Adam(lr=ga_optimizer_lr)
+        self._ga_loss = 'binary_crossentropy'
+        self.ga_optimizer = ga_optimizer
 
     def _build_g_model(self):
 
@@ -113,14 +111,14 @@ class DCGAN(object):
         y = Activation('sigmoid')(y)
 
         self.a_model = Model(x, y, name='adversarial_discriminator')
-        self.a_model.compile(loss=self.a_loss, optimizer=self.a_optimizer, metrics=['accuracy'])
+        self.a_model.compile(loss=self._a_loss, optimizer=self.a_optimizer, metrics=['accuracy'])
 
     def _build_stacked_model(self):
         x = Input(shape=(self.g_input_dim, ))
         y = self.a_model(self.g_model(x))
 
         self.stacked_model = Model(x, y, name='stacked_model')
-        self.stacked_model.compile(loss=self.ga_loss, optimizer=self.ga_optimizer, metrics=['accuracy'])
+        self.stacked_model.compile(loss=self._ga_loss, optimizer=self.ga_optimizer, metrics=['accuracy'])
 
     def build(self):
         """Builds GAN model.
@@ -178,7 +176,6 @@ class DCGAN(object):
         return self.a_model.predict(x)
 
     def pretrain(self, x_real, batch_size, epochs):
-        # TODO: Revise this function
         """Pre-trains the adversarial discriminator model on given real data and (crude) generated data.
         Args:
             x_real: Training (real) data.
@@ -201,7 +198,7 @@ class DCGAN(object):
 
         return history
 
-    def train_on_batch(self, x_real, freeze_discriminator=False):
+    def train_on_batch(self, x_real, freeze_discriminator=True):
         """Trains GAN on a batch of samples.
         Args:
             x_real: Batch of real samples.
@@ -215,14 +212,18 @@ class DCGAN(object):
         """
         batch_size = x_real.shape[0]
 
-        # Produce fake images with generator and concatenate with a batch of real images
-        x_fake = self.generate(batch_size)
-        x = np.concatenate((x_real, x_fake), axis=0)
-        y = np.ones((2*batch_size, 1))
-        y[batch_size:] = 0
+        # ----------- Adversarial Discriminator update
 
-        # Perform a batch update on the discriminator
-        a_model_metrics = self.a_model.train_on_batch(x, y)
+        # Train batch of real images
+        y_real = np.ones((batch_size, 1))
+        _ = self.a_model.train_on_batch(x_real, y_real)
+
+        # Train batch of fake images
+        x_fake = self.generate(batch_size)
+        y_fake = np.zeros((batch_size, 1))
+        a_model_metrics = self.a_model.train_on_batch(x_fake, y_fake)
+
+        # ----------- Generator update
 
         # Freeze discriminator weights
         if freeze_discriminator:
