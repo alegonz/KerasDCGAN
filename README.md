@@ -5,7 +5,7 @@
 ## 手書きカタカナ文字のデータについて
 手書きのカタカナ文字の画像データはETLデータベースに公開されているデータを利用させていただいています。
 
-![real_images_sample](images/real_images_sample.png "Real images sample")
+![real_images_sample](illustrations/real_images_sample.png "Real images sample")
 
 ## GANについて
 
@@ -63,10 +63,10 @@ x_train = x_all[katakana_idx]
 
 ## 結果サンプル
 ### 偽造画像のサンプル
-![fake_images_026500](images/fake_images_026500.png "Fake images sample")
+![fake_images_026500](illustrations/fake_images_026500.png "Fake images sample")
 
 ### 偽造画像の進化のアニメーション
-![100_256_512_30000](images/100_256_512_30000.gif "Fake images animation")
+![100_256_512_30000](illustrations/100_256_512_30000.gif "Fake images animation")
 
 ## Repository info
 ### Requirements
